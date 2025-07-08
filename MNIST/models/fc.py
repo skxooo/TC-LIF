@@ -8,7 +8,7 @@ class RecurrentContainer(base.MemoryModule):
     def __init__(self, sub_module: nn.Module, element_wise_function=lambda x, y: x + y, step_mode='s', hid_dim=64):
         super().__init__()
         self.hid_weight = nn.Linear(hid_dim, hid_dim)
-        # nn.init.orthogonal_(self.hid_weight.weight)
+        # nn.init.orthogonal_(self.hid_weight.weight) # 将权重初始化为正交矩阵，以便更好地梯度传播
         self.step_mode = step_mode
         assert not hasattr(sub_module, 'step_mode') or sub_module.step_mode == 's'
         self.sub_module = sub_module

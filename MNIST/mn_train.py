@@ -18,8 +18,47 @@ from load_dataset import load_dataset
 from models.fc import ffMnist, fbMnist
 from utils import *
 
+parser = argparse.ArgumentParser(description='Sequential MNIST/PMNIST')
+parser.add_argument('--task', default='SMNIST', type=str, help='SMNIST, PSMNIST')
+parser.add_argument('--optim', default='adam', type=str, help='optimizer (default: adam)')  # sgd
+parser.add_argument('--results-dir', default='', type=str, metavar='PATH', help='path to cache (default: none)')
+parser.add_argument('-p', '--print-freq', default=100, type=int,
+                    metavar='N', help='print frequency (default: 10)')
+parser.add_argument('--seed', default=0, type=int, metavar='N', help='seed')
+parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('--lr', '--learning-rate', default=0.0005, type=float, metavar='LR', help='initial learning rate',
+                    dest='lr')
+parser.add_argument('--schedule', default=[60, 80], nargs='*', type=int,
+                    help='learning rate schedule (when to drop lr by 10x); does not take effect if --cos is on')
+parser.add_argument('--batch-size', default=256, type=int, metavar='N', help='mini-batch size')
+parser.add_argument('--wd', default=0, type=float, metavar='W', help='weight decay')
+parser.add_argument("--workers", type=int, default=0)
+parser.add_argument('--cos', action='store_true', default=False, help='use cosine lr schedule')
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+# options for SNNs
+parser.add_argument('--time-window', default=784, type=int, help='')
+parser.add_argument('--threshold', default=1.0, type=float, help='')
+parser.add_argument('--detach-reset', action='store_true', default=False, help='')
+parser.add_argument('--hard-reset', action='store_true', default=False, help='')
+parser.add_argument('--decay-factor', default=1.0, type=float, help='')
+parser.add_argument('--beta1', default=0., type=float, help='')
+parser.add_argument('--beta2', default=0., type=float, help='')
+parser.add_argument('--gamma', default=0.5, type=float, help='dendritic reset scaling hyper-parameter')
+parser.add_argument('--sg', default='gau', type=str, help='sg: triangle, exp, gau, rectangle and sigmoid')
+parser.add_argument('--neuron', default='tclif', type=str, help='neuron: tclif, lif, alif and plif')
+parser.add_argument('--network', default='ff', type=str, help='network(recurrent or feedforward): fb, ff')
+parser.add_argument('--ind', default=1, type=int, help='input dim: 1, 4, 8')
+
+args = parser.parse_args()
+
+if args.results_dir == '':
+    args.results_dir = './results/cs-' + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+Path(args.results_dir).mkdir(parents=True, exist_ok=True)
+setup_logging(log_file=os.path.join(args.results_dir, "log-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".txt"))
+
+
+def train(train_loader, model, criterion, optimizer, epoch, args, gpu):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -36,8 +75,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-        images = images.cuda(non_blocking=True)  # images:[bs, 1, 28, 28]
-        target = target.cuda(non_blocking=True)
+        images = images.cuda(gpu, non_blocking=True)  # images:[bs, 1, 28, 28]
+        target = target.cuda(gpu, non_blocking=True)
         # print(type(target[0][0]))
 
         input_im = images.view(-1, args.time_window, 1)  # input_im:[bs, 784, 1]
@@ -72,7 +111,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     return top1.avg, losses.avg
 
 
-def validate(val_loader, model, criterion, args):
+def validate(val_loader, model, criterion, args, device):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -88,8 +127,8 @@ def validate(val_loader, model, criterion, args):
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
-            images = images.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
+            images = images.cuda(gpu, non_blocking=True)
+            target = target.cuda(gpu, non_blocking=True)
 
             # img.shape = [N, 1, H, W]
 
@@ -132,48 +171,8 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-parser = argparse.ArgumentParser(description='Sequential MNIST/PMNIST')
-parser.add_argument('--task', default='SMNIST', type=str, help='SMNIST, PSMNIST')
-parser.add_argument('--optim', default='adam', type=str, help='optimizer (default: adam)')  # sgd
-parser.add_argument('--results-dir', default='', type=str, metavar='PATH', help='path to cache (default: none)')
-parser.add_argument('-p', '--print-freq', default=100, type=int,
-                    metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--seed', default=0, type=int, metavar='N', help='seed')
-parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
-parser.add_argument('--lr', '--learning-rate', default=0.0005, type=float, metavar='LR', help='initial learning rate',
-                    dest='lr')
-parser.add_argument('--schedule', default=[60, 80], nargs='*', type=int,
-                    help='learning rate schedule (when to drop lr by 10x); does not take effect if --cos is on')
-parser.add_argument('--batch-size', default=256, type=int, metavar='N', help='mini-batch size')
-parser.add_argument('--wd', default=0, type=float, metavar='W', help='weight decay')
-parser.add_argument("--workers", type=int, default=0)
-parser.add_argument('--cos', action='store_true', default=False, help='use cosine lr schedule')
-
-# options for SNNs
-parser.add_argument('--time-window', default=784, type=int, help='')
-parser.add_argument('--threshold', default=1.0, type=float, help='')
-parser.add_argument('--detach-reset', action='store_true', default=False, help='')
-parser.add_argument('--hard-reset', action='store_true', default=False, help='')
-parser.add_argument('--decay-factor', default=1.0, type=float, help='')
-parser.add_argument('--beta1', default=0., type=float, help='')
-parser.add_argument('--beta2', default=0., type=float, help='')
-parser.add_argument('--gamma', default=0.5, type=float, help='dendritic reset scaling hyper-parameter')
-parser.add_argument('--sg', default='gau', type=str, help='sg: triangle, exp, gau, rectangle and sigmoid')
-parser.add_argument('--neuron', default='tclif', type=str, help='neuron: tclif, lif, alif and plif')
-parser.add_argument('--network', default='ff', type=str, help='network(recurrent or feedforward): fb, ff')
-parser.add_argument('--ind', default=1, type=int, help='input dim: 1, 4, 8')
-
-args = parser.parse_args()
-
 perm = torch.randperm(784)
-
-if args.results_dir == '':
-    args.results_dir = './cs-' + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
-Path(args.results_dir).mkdir(parents=True, exist_ok=True)
-logger = setup_logging(os.path.join(args.results_dir, "log-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".txt"))
-
-gpu = torch.device('cuda')
+gpu = torch.device('cuda:0')
 seed_everything(seed=args.seed, is_cuda=True)
 
 torch.backends.cudnn.benchmark = True
@@ -248,9 +247,10 @@ elif args.task == 'PSMNIST':
 else:
     raise NotImplementedError
 
-logging.info(str(model))
-para = utils.count_parameters(model)
 
+para = utils.count_parameters(model)
+logging.info(str(model))
+logging.info('params: %s', para)
 criterion = nn.CrossEntropyLoss().cuda(gpu)
 
 if args.optim == 'sgd':
@@ -278,9 +278,9 @@ for epoch in range(start_epoch, args.epochs):
     flag = False
     adjust_learning_rate(optimizer, epoch, args)
 
-    train_acc, train_loss = train(train_loader, model, criterion, optimizer, epoch, args)
+    train_acc, train_loss = train(train_loader, model, criterion, optimizer, epoch, args, gpu)
 
-    acc1, acc5 = validate(test_loader, model, criterion, args)
+    acc1, acc5 = validate(test_loader, model, criterion, args, gpu)
     best_acc.top1 = max(best_acc.top1, acc1)
     best_acc.top5 = max(best_acc.top5, acc5)
     train_res[str(epoch)] = [train_acc.cpu().item(), train_loss]

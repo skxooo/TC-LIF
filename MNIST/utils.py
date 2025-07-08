@@ -11,19 +11,44 @@ from prettytable import PrettyTable
 from spiking_neuron import base
 
 
-def setup_logging(log_file='log.txt'):
-    """Setup logging configuration"""
-    logging.basicConfig(level=logging.DEBUG,
-                        format="%(asctime)s - %(levelname)s - %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S",
-                        filename=log_file,
-                        filemode='w')
+# def setup_logging(log_file='log.txt'):
+#     """Setup logging configuration"""
+#     logging.basicConfig(level=logging.DEBUG,
+#                         format="%(asctime)s - %(levelname)s - %(message)s",
+#                         datefmt="%Y-%m-%d %H:%M:%S",
+#                         filename=log_file,
+#                         filemode='w')
+#
+#     console = logging.StreamHandler()
+#     console.setLevel(logging.INFO)
+#     formatter = logging.Formatter('%(message)s')
+#     console.setFormatter(formatter)
+#     logging.getLogger('').addHandler(console)
 
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+def setup_logging(log_file='log.txt'):
+    # 获取 root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    # 清除所有已存在的 handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # 文件 Handler
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
+    file_handler.setFormatter(file_formatter)
+
+    # 控制台 Handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter("%(message)s")
+    console_handler.setFormatter(console_formatter)
+
+    # 添加 Handlers
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
 
 def reset_states(model):
